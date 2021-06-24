@@ -6,9 +6,10 @@ How to use
 
 To publish library to AWS codeartifact add the below line to build.gradle
 
-"'apply from: 'https://raw.githubusercontent.com/Saasro/awsCodeArtifacts/main/publishLibrary.gradle'"
+apply from: 'https://raw.githubusercontent.com/Saasro/awsCodeArtifacts/main/publishLibrary.gradle'
 
 To fetch library form AWS code artifact, add the below line to build.gradle
-apply form:  'https://raw.githubusercontent.com/Saasro/awsCodeArtifacts/main/syncAwsArtifact.gradle'
+
+apply form: 'https://raw.githubusercontent.com/Saasro/awsCodeArtifacts/main/syncAwsArtifact.gradle'
 
 
