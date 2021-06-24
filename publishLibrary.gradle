@@ -1,0 +1,114 @@
+import groovy.json.JsonSlurper
+import java.time.OffsetDateTime
+
+apply plugin: 'maven-publish'
+
+String userName  = 'aws'
+afterEvaluate {
+
+    publishing {
+        preInit()
+        System.out.println("----------------------------------------------------------")
+        System.out.println("Repository      :: " + repository)
+        System.out.println("Namespace       :: " + namespace)
+        System.out.println("Domain          :: " + domain)
+        System.out.println("LibraryVersion  :: " + libraryVersion)
+        System.out.println("ArtifactID      :: " + artifactID)
+        System.out.println("----------------------------------------------------------")
+
+        def authToken = getAuthToken()
+        def publishUrl = getPublishURL()
+
+        publications {
+            Library(MavenPublication) {
+                groupId = namespace
+                artifactId = artifactID
+                version = libraryVersion
+                from components.java
+            }
+        }
+
+        repositories {
+            maven {
+                name = name
+                url = publishUrl
+                credentials {
+                    username = userName
+                    password = authToken
+                }
+            }
+        }
+    }
+}
+
+private Object getPublishURL() {
+    def jsParser = new JsonSlurper()
+    // get end url
+    def urlOutput = "aws codeartifact get-repository-endpoint --domain ${domain} --repository ${repository} --format maven".execute().text
+    def urlResult = jsParser.parseText(urlOutput)
+    def publishUrl = urlResult.repositoryEndpoint
+    publishUrl
+}
+
+private String getAuthToken() {
+    def token = "authToken.txt"
+    def getToken = true
+    def authToken = ""
+    File file = new File("$projectDir/${token}")
+    if (!file.exists()) {
+        file.createNewFile()
+    }
+    def jsParser = new JsonSlurper()
+    def json = file.text
+    if (json != null && json.length() > 0) {
+        def auth = jsParser.parseText(json)
+        authToken = auth.authorizationToken
+        def expireTimeString = auth.expiration
+        def currentTime = OffsetDateTime.now()
+        OffsetDateTime expireTime = OffsetDateTime.parse(expireTimeString)
+        getToken = currentTime.isAfter(expireTime)
+    }
+    if (getToken) {
+        System.out.println("Fetching new Token")
+        def tokenResponse = "aws codeartifact get-authorization-token --domain ${domain}".execute().text
+        file.text = tokenResponse
+        def authResponse = jsParser.parseText(tokenResponse)
+        authToken = authResponse.authorizationToken
+    }
+    authToken
+}
+
+private void preInit() {
+    def preReqProps = ['repository', 'namespace', 'domain', 'libraryVersion', 'artifactID']
+    for (String prop : preReqProps) {
+        if (!project.hasProperty(prop)) {
+            throw new GradleException("Invalid Project config ::  ${prop} property missing in gradle.properties")
+        }
+    }
+
+    try{
+        def conf = "aws".execute().text
+        System.out.println(conf)
+    }catch(Exception e){
+        throw new GradleException("AWS CLI not configure, download and configure AWS CLI")
+    }
+}
+
+
+tasks.register('deleteCurrentVersion') {
+    doLast {
+        def jsParser = new JsonSlurper()
+        def domainDetails = "aws codeartifact describe-domain --domain ${domain}".execute().text
+        def domainJson = jsParser.parseText(domainDetails)
+        def domainOwner = domainJson.domain.owner
+
+        // Delete the current package with the ID
+        System.out.println("Deleting Artifact Version :: ${libraryVersion}")
+        def deleteOutput = "aws codeartifact delete-package-versions --domain $domain --domain-owner $domainOwner  --repository $repository   --package ${artifactID}  --format maven --versions ${libraryVersion}  --namespace $namespace".execute().text
+        System.out.println(deleteOutput)
+
+    }
+}
+
+
+

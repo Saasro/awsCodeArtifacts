@@ -1,0 +1,76 @@
+import groovy.json.JsonSlurper
+
+import java.time.OffsetDateTime
+
+
+repositories {
+    preInit()
+    def authToken = getAuthToken()
+    def publishUrl = getPublishURL()
+    mavenCentral()
+    maven {
+        url = publishUrl
+        credentials {
+            username = 'aws'
+            password = authToken
+        }
+    }
+}
+
+private void preInit() {
+    def preReqProps = ['repository', 'domain']
+    for (String prop : preReqProps) {
+        if (!project.hasProperty(prop)) {
+            throw new GradleException("Invalid Project config ::  ${prop} property missing in gradle.properties")
+        }
+    }
+
+    try{
+        def conf = "aws".execute().text
+        System.out.println(conf)
+    }catch(Exception e){
+        throw new GradleException("AWS CLI not configure, download and configure AWS CLI")
+    }
+}
+
+
+private String getAuthToken() {
+    def token = "authToken.txt"
+    def getToken = true
+    def authToken = ""
+    File file = new File("$projectDir/${token}")
+    if (!file.exists()) {
+        file.createNewFile()
+    }
+    def jsParser = new JsonSlurper()
+    def json = file.text
+    if (json != null && json.length() > 0) {
+        def auth = jsParser.parseText(json)
+        authToken = auth.authorizationToken
+        def expireTimeString = auth.expiration
+        def currentTime = OffsetDateTime.now()
+        OffsetDateTime expireTime = OffsetDateTime.parse(expireTimeString)
+        getToken = currentTime.isAfter(expireTime)
+    }
+    if (getToken) {
+        System.out.println("Fetching new Token")
+        def tokenResponse = "aws codeartifact get-authorization-token --domain ${domain}".execute().text
+        file.text = tokenResponse
+        def authResponse = jsParser.parseText(tokenResponse)
+        authToken = authResponse.authorizationToken
+    }
+    authToken
+}
+
+private Object getPublishURL() {
+    def jsParser = new JsonSlurper()
+    // get end url
+    def urlOutput = "aws codeartifact get-repository-endpoint --domain ${domain} --repository ${repository} --format maven".execute().text
+    def urlResult = jsParser.parseText(urlOutput)
+    def publishUrl = urlResult.repositoryEndpoint
+    publishUrl
+}
+
+
+
+
